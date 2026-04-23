@@ -1,0 +1,277 @@
+import React, { useState, useEffect } from 'react';
+import { executeQuery, runCommand } from '../lib/db';
+import { Stethoscope, User, Clipboard, Activity, CheckCircle, Download } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+
+const NuovaVisita = () => {
+  const [lavoratori, setLavoratori] = useState<any[]>([]);
+  const [selectedWorkerId, setSelectedWorkerId] = useState('');
+  const [workerData, setWorkerData] = useState<any>(null);
+  const [step, setStep] = useState(1);
+
+  const [visitForm, setVisitForm] = useState({
+    data_visita: new Date().toISOString().split('T')[0],
+    tipo_visita: 'preventiva',
+    anamnesi_lavorativa: '',
+    anamnesi_familiare: '',
+    anamnesi_patologica: '',
+    esame_obiettivo: '',
+    giudizio: 'idoneo',
+    prescrizioni: '',
+    scadenza_prossima: '',
+    peso: 70,
+    altezza: 170,
+    p_sistolica: 120,
+    p_diastolica: 80,
+    frequenza: 70
+  });
+
+  useEffect(() => {
+    const data = executeQuery(`
+      SELECT workers.id, workers.nome, workers.cognome, workers.mansione, companies.ragione_sociale as azienda
+      FROM workers
+      JOIN companies ON workers.company_id = companies.id
+    `);
+    setLavoratori(data);
+  }, []);
+
+  useEffect(() => {
+    if (selectedWorkerId) {
+      const data = lavoratori.find(l => l.id.toString() === selectedWorkerId);
+      setWorkerData(data);
+
+      // Auto-calculate next expiry (default 12 months)
+      const nextDate = new Date();
+      nextDate.setFullYear(nextDate.getFullYear() + 1);
+      setVisitForm(prev => ({...prev, scadenza_prossima: nextDate.toISOString().split('T')[0]}));
+    }
+  }, [selectedWorkerId, lavoratori]);
+
+  const handleSave = async () => {
+    // 1. Insert Visit
+    await runCommand(`
+      INSERT INTO visits (worker_id, data_visita, tipo_visita, anamnesi_lavorativa, anamnesi_familiare, anamnesi_patologica, esame_obiettivo, giudizio, prescrizioni, scadenza_prossima)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      selectedWorkerId, visitForm.data_visita, visitForm.tipo_visita,
+      visitForm.anamnesi_lavorativa, visitForm.anamnesi_familiare, visitForm.anamnesi_patologica,
+      visitForm.esame_obiettivo, visitForm.giudizio, visitForm.prescrizioni, visitForm.scadenza_prossima
+    ]);
+
+    // 2. Insert Biometrics (simplified lastrowid logic for this demo since we use sql.js)
+    const lastVisit = executeQuery("SELECT id FROM visits ORDER BY id DESC LIMIT 1")[0];
+    if (lastVisit) {
+      const bmi = visitForm.peso / ((visitForm.altezza/100) ** 2);
+      await runCommand(`
+        INSERT INTO biometrics (visit_id, peso, altezza, bmi, pressione_sistolica, pressione_diastolica, frequenza_cardiaca)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [lastVisit.id, visitForm.peso, visitForm.altezza, bmi, visitForm.p_sistolica, visitForm.p_diastolica, visitForm.frequenza]);
+    }
+
+    alert("Visita salvata con successo!");
+    generatePDF();
+    // Reset
+    setStep(1);
+    setSelectedWorkerId('');
+  };
+
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    doc.setFont("helvetica", "bold");
+    doc.text("GIUDIZIO DI IDONEITÀ ALLA MANSIONE SPECIFICA", 105, 20, { align: 'center' });
+    doc.setFontSize(10);
+    doc.text("(D.Lgs. 81/08 e s.m.i.)", 105, 26, { align: 'center' });
+
+    doc.setFont("helvetica", "normal");
+    doc.rect(15, 35, 180, 40);
+    doc.text(`Lavoratore: ${workerData.cognome} ${workerData.nome}`, 20, 45);
+    doc.text(`Azienda: ${workerData.azienda}`, 20, 52);
+    doc.text(`Mansione: ${workerData.mansione}`, 20, 59);
+    doc.text(`Data Visita: ${visitForm.data_visita}`, 20, 66);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("GIUDIZIO:", 20, 85);
+    doc.setFontSize(14);
+    doc.text(visitForm.giudizio.toUpperCase(), 45, 85);
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    if (visitForm.prescrizioni) {
+      doc.text("Prescrizioni/Limitazioni:", 20, 95);
+      doc.text(visitForm.prescrizioni, 20, 102, { maxWidth: 170 });
+    }
+
+    doc.text(`Prossima visita entro il: ${visitForm.scadenza_prossima}`, 20, 130);
+
+    doc.line(130, 160, 180, 160);
+    doc.text("Firma del Medico Competente", 135, 165);
+
+    doc.save(`Giudizio_${workerData.cognome}_${visitForm.data_visita}.pdf`);
+  };
+
+  return (
+    <div className="p-8 max-w-5xl mx-auto">
+      <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2 mb-8">
+        <Stethoscope className="text-blue-600" /> Nuova Visita Medica (Allegato 3A)
+      </h1>
+
+      {/* Progress Stepper */}
+      <div className="flex items-center mb-10">
+        {[1, 2, 3, 4].map((s) => (
+          <React.Fragment key={s}>
+            <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition ${
+              step >= s ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-400'
+            }`}>
+              {step > s ? <CheckCircle size={20} /> : s}
+            </div>
+            {s < 4 && <div className={`flex-1 h-1 mx-2 ${step > s ? 'bg-blue-600' : 'bg-gray-200'}`} />}
+          </React.Fragment>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
+        {step === 1 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold flex items-center gap-2"><User className="text-blue-500" /> Selezione Lavoratore</h2>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-gray-600">Scegli il lavoratore per iniziare la visita</label>
+              <select
+                className="border border-gray-300 rounded-xl p-3 text-lg outline-none focus:ring-2 focus:ring-blue-500"
+                value={selectedWorkerId}
+                onChange={e => setSelectedWorkerId(e.target.value)}
+              >
+                <option value="">-- Seleziona --</option>
+                {lavoratori.map(l => (
+                  <option key={l.id} value={l.id}>{l.cognome} {l.nome} ({l.azienda})</option>
+                ))}
+              </select>
+            </div>
+            {workerData && (
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
+                <div>
+                  <p className="text-blue-800 font-bold">{workerData.azienda}</p>
+                  <p className="text-blue-600 text-sm">Mansione: {workerData.mansione}</p>
+                </div>
+                <button onClick={() => setStep(2)} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">Procedi</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold flex items-center gap-2"><Clipboard className="text-blue-500" /> Anamnesi e Biometria</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium">Anamnesi Lavorativa</label>
+                  <textarea className="border border-gray-300 rounded-md p-2 h-20" value={visitForm.anamnesi_lavorativa} onChange={e => setVisitForm({...visitForm, anamnesi_lavorativa: e.target.value})} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium">Anamnesi Familiare e Patologica</label>
+                  <textarea className="border border-gray-300 rounded-md p-2 h-20" value={visitForm.anamnesi_patologica} onChange={e => setVisitForm({...visitForm, anamnesi_patologica: e.target.value})} />
+                </div>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-xl space-y-4">
+                <p className="font-semibold text-sm text-gray-500 uppercase">Parametri Biometrici</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs">Peso (kg)</label>
+                    <input type="number" className="border rounded p-1" value={visitForm.peso} onChange={e => setVisitForm({...visitForm, peso: parseFloat(e.target.value)})} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs">Altezza (cm)</label>
+                    <input type="number" className="border rounded p-1" value={visitForm.altezza} onChange={e => setVisitForm({...visitForm, altezza: parseInt(e.target.value)})} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs">PA Sistolica</label>
+                    <input type="number" className="border rounded p-1" value={visitForm.p_sistolica} onChange={e => setVisitForm({...visitForm, p_sistolica: parseInt(e.target.value)})} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs">PA Diastolica</label>
+                    <input type="number" className="border rounded p-1" value={visitForm.p_diastolica} onChange={e => setVisitForm({...visitForm, p_diastolica: parseInt(e.target.value)})} />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-between mt-8">
+              <button onClick={() => setStep(1)} className="text-gray-500">Indietro</button>
+              <button onClick={() => setStep(3)} className="bg-blue-600 text-white px-8 py-2 rounded-lg">Procedi</button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold flex items-center gap-2"><Activity className="text-blue-500" /> Esame Obiettivo</h2>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium">Risultanze Esame Obiettivo</label>
+              <textarea
+                placeholder="es. Torace normoconformato, MV presente su tutto l'ambito, toni cardiaci puri..."
+                className="border border-gray-300 rounded-md p-2 h-40"
+                value={visitForm.esame_obiettivo}
+                onChange={e => setVisitForm({...visitForm, esame_obiettivo: e.target.value})}
+              />
+            </div>
+            <div className="flex justify-between mt-8">
+              <button onClick={() => setStep(2)} className="text-gray-500">Indietro</button>
+              <button onClick={() => setStep(4)} className="bg-blue-600 text-white px-8 py-2 rounded-lg">Procedi al Giudizio</button>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold text-blue-700">Finalizzazione Giudizio di Idoneità</h2>
+            <div className="bg-yellow-50 p-6 rounded-xl border border-yellow-100">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex flex-col gap-2">
+                  <label className="font-bold text-gray-700">Giudizio Finale</label>
+                  <select
+                    className="border border-gray-300 rounded-lg p-2 bg-white"
+                    value={visitForm.giudizio}
+                    onChange={e => setVisitForm({...visitForm, giudizio: e.target.value})}
+                  >
+                    <option value="idoneo">IDONEO</option>
+                    <option value="idoneo con prescrizioni">IDONEO CON PRESCRIZIONI</option>
+                    <option value="idoneo con limitazioni">IDONEO CON LIMITAZIONI</option>
+                    <option value="non idoneo temporaneo">NON IDONEO TEMPORANEO</option>
+                    <option value="non idoneo permanente">NON IDONEO PERMANENTE</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="font-bold text-gray-700">Scadenza Prossima Visita</label>
+                  <input
+                    type="date"
+                    className="border border-gray-300 rounded-lg p-2 bg-white"
+                    value={visitForm.scadenza_prossima}
+                    onChange={e => setVisitForm({...visitForm, scadenza_prossima: e.target.value})}
+                  />
+                </div>
+                <div className="col-span-full flex flex-col gap-2">
+                  <label className="font-bold text-gray-700">Note e Prescrizioni</label>
+                  <textarea
+                    className="border border-gray-300 rounded-lg p-2 h-24 bg-white"
+                    placeholder="Dettagliare eventuali prescrizioni o limitazioni..."
+                    value={visitForm.prescrizioni}
+                    onChange={e => setVisitForm({...visitForm, prescrizioni: e.target.value})}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-between items-center mt-10">
+              <button onClick={() => setStep(3)} className="text-gray-500">Indietro</button>
+              <div className="flex gap-4">
+                <button onClick={handleSave} className="bg-green-600 text-white px-10 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-green-700 shadow-lg">
+                  <Download size={20} /> Salva e Genera PDF
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default NuovaVisita;
