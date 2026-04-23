@@ -14,6 +14,7 @@ const Lavoratori = () => {
     nome: '',
     cognome: '',
     codice_fiscale: '',
+    email: '',
     data_nascita: '',
     mansione: '',
     data_assunzione: ''
@@ -38,12 +39,12 @@ const Lavoratori = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await runCommand(
-      `INSERT INTO workers (company_id, nome, cognome, codice_fiscale, data_nascita, mansione, data_assunzione)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [formData.company_id, formData.nome, formData.cognome, formData.codice_fiscale, formData.data_nascita, formData.mansione, formData.data_assunzione]
+      `INSERT INTO workers (company_id, nome, cognome, codice_fiscale, email, data_nascita, mansione, data_assunzione)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [formData.company_id, formData.nome, formData.cognome, formData.codice_fiscale, formData.email, formData.data_nascita, formData.mansione, formData.data_assunzione]
     );
     setShowForm(false);
-    setFormData({ company_id: '', nome: '', cognome: '', codice_fiscale: '', data_nascita: '', mansione: '', data_assunzione: '' });
+    setFormData({ company_id: '', nome: '', cognome: '', codice_fiscale: '', email: '', data_nascita: '', mansione: '', data_assunzione: '' });
     fetchData();
   };
 
@@ -94,6 +95,10 @@ const Lavoratori = () => {
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-600">Codice Fiscale</label>
               <input className="border border-gray-300 rounded-md p-2" value={formData.codice_fiscale} onChange={e => setFormData({...formData, codice_fiscale: e.target.value.toUpperCase()})} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-600">Email</label>
+              <input type="email" className="border border-gray-300 rounded-md p-2" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-600">Data di Nascita</label>
@@ -154,7 +159,7 @@ const Lavoratori = () => {
               <tr key={l.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4">
                   <div className="font-medium text-gray-800">{l.cognome} {l.nome}</div>
-                  <div className="text-xs text-gray-500">{l.data_nascita}</div>
+                  <div className="text-xs text-gray-500">{l.email || 'Email non inserita'}</div>
                 </td>
                 <td className="px-6 py-4 text-gray-600 text-sm font-mono">{l.codice_fiscale}</td>
                 <td className="px-6 py-4 text-gray-600">{l.azienda}</td>

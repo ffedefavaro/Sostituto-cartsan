@@ -44,6 +44,7 @@ const createTables = (database: Database) => {
       nome TEXT NOT NULL,
       cognome TEXT NOT NULL,
       codice_fiscale TEXT UNIQUE,
+      email TEXT,
       data_nascita DATE,
       luogo_nascita TEXT,
       sesso TEXT,
@@ -96,6 +97,26 @@ const createTables = (database: Database) => {
       n_iscrizione TEXT,
       timbro_immagine TEXT -- Base64
     );
+
+    CREATE TABLE IF NOT EXISTS attachments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      worker_id INTEGER,
+      visit_id INTEGER,
+      filename TEXT,
+      file_type TEXT,
+      content BLOB,
+      extracted_text TEXT,
+      date_added DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (worker_id) REFERENCES workers(id),
+      FOREIGN KEY (visit_id) REFERENCES visits(id)
+    );
+
+    -- Try to add email column if it doesn't exist (migration)
+    try {
+      database.run("ALTER TABLE workers ADD COLUMN email TEXT;");
+    } catch (e) {
+      // Column might already exist
+    }
   `);
 };
 

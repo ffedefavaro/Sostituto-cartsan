@@ -10,12 +10,23 @@ const Settings = () => {
     timbro_immagine: ''
   });
 
+  const [googleConfig, setGoogleConfig] = useState({
+    clientId: localStorage.getItem('google_client_id') || '',
+    clientSecret: localStorage.getItem('google_client_secret') || ''
+  });
+
   useEffect(() => {
     const data = executeQuery("SELECT * FROM doctor_profile WHERE id = 1");
     if (data.length > 0) {
       setDoctor(data[0]);
     }
   }, []);
+
+  const saveGoogleConfig = () => {
+    localStorage.setItem('google_client_id', googleConfig.clientId);
+    localStorage.setItem('google_client_secret', googleConfig.clientSecret);
+    alert("Configurazione Google salvata!");
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,6 +120,41 @@ const Settings = () => {
               </button>
             </div>
           </form>
+        </div>
+
+        {/* Google API Integration */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-4 bg-gray-50 border-b border-gray-200 font-semibold flex items-center gap-2">
+            <Shield size={18} className="text-orange-500" /> Integrazione Google API (Gmail/Calendar)
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-600">Client ID</label>
+              <input
+                className="border rounded-md p-2 font-mono text-xs"
+                value={googleConfig.clientId}
+                onChange={e => setGoogleConfig({...googleConfig, clientId: e.target.value})}
+                placeholder="xxxxxx.apps.googleusercontent.com"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-600">Client Secret</label>
+              <input
+                type="password"
+                className="border rounded-md p-2 font-mono text-xs"
+                value={googleConfig.clientSecret}
+                onChange={e => setGoogleConfig({...googleConfig, clientSecret: e.target.value})}
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={saveGoogleConfig}
+                className="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700 transition"
+              >
+                Salva Configurazione Google
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Database Management */}

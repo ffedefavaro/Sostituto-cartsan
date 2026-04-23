@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
-import { Stethoscope, User, Clipboard, Activity, CheckCircle, Download } from 'lucide-react';
+import { Stethoscope, User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Copy, FileText } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import { initGoogleAuth, fetchGmailMessages, type GmailMessage } from '../lib/gmail';
+import { fetchGmailAttachments } from '../lib/attachments';
 
 const NuovaVisita = () => {
   const [lavoratori, setLavoratori] = useState<any[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
   const [workerData, setWorkerData] = useState<any>(null);
   const [step, setStep] = useState(1);
+
+  // Gmail State
+  const [gmailMessages, setGmailMessages] = useState<GmailMessage[]>([]);
+  const [loadingGmail, setLoadingGmail] = useState(false);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
   const [visitForm, setVisitForm] = useState({
     data_visita: new Date().toISOString().split('T')[0],
@@ -46,6 +53,53 @@ const NuovaVisita = () => {
       setVisitForm(prev => ({...prev, scadenza_prossima: nextDate.toISOString().split('T')[0]}));
     }
   }, [selectedWorkerId, lavoratori]);
+
+  const handleAuthAndFetch = async () => {
+    const clientId = localStorage.getItem('google_client_id');
+    if (!clientId) {
+      alert("Configura il Client ID nelle impostazioni prima di usare Gmail.");
+      return;
+    }
+
+    setLoadingGmail(true);
+    try {
+      const client = (window as any).google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'https://www.googleapis.com/auth/gmail.readonly',
+        callback: async (response: any) => {
+          if (response.access_token) {
+            setAccessToken(response.access_token);
+            const msgs = await fetchGmailMessages(response.access_token, workerData.email);
+            setGmailMessages(msgs);
+          }
+          setLoadingGmail(false);
+        },
+      });
+      client.requestAccessToken();
+    } catch (e) {
+      console.error(e);
+      setLoadingGmail(false);
+    }
+  };
+
+  const importEmailText = async (msg: GmailMessage) => {
+    let textToImport = `--- EMAIL del ${msg.date} ---\n${msg.body}\n`;
+
+    if (accessToken) {
+      const attachments = await fetchGmailAttachments(accessToken, msg.id);
+      attachments.forEach(att => {
+        if (att.extracted_text) {
+          textToImport += `\n--- ALLEGATO: ${att.filename} ---\n${att.extracted_text}\n`;
+        }
+      });
+    }
+
+    setVisitForm(prev => ({
+      ...prev,
+      anamnesi_patologica: prev.anamnesi_patologica + (prev.anamnesi_patologica ? "\n\n" : "") + textToImport
+    }));
+    alert("Testo e allegati importati in Anamnesi Patologica!");
+  };
 
   const handleSave = async () => {
     // 1. Insert Visit
@@ -161,6 +215,45 @@ const NuovaVisita = () => {
         {step === 2 && (
           <div className="space-y-6">
             <h2 className="text-xl font-semibold flex items-center gap-2"><Clipboard className="text-blue-500" /> Anamnesi e Biometria</h2>
+
+            {/* Gmail Import Section */}
+            <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-orange-800 font-bold flex items-center gap-2 text-sm">
+                  <Mail size={16} /> ACQUISIZIONE DOCUMENTI DA GMAIL ({workerData.email})
+                </h3>
+                <button
+                  onClick={handleAuthAndFetch}
+                  disabled={loadingGmail || !workerData.email}
+                  className="bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {loadingGmail ? <RefreshCw className="animate-spin" size={14} /> : <RefreshCw size={14} />}
+                  Sincronizza Mail Paziente
+                </button>
+              </div>
+
+              {gmailMessages.length > 0 ? (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                  {gmailMessages.map(msg => (
+                    <div key={msg.id} className="bg-white p-3 rounded-lg border border-orange-200 text-xs flex justify-between items-start gap-4">
+                      <div className="flex-1">
+                        <div className="font-bold text-gray-700">{msg.date}</div>
+                        <div className="text-gray-500 line-clamp-2 italic">"{msg.snippet}"</div>
+                      </div>
+                      <button
+                        onClick={() => importEmailText(msg)}
+                        className="text-orange-600 hover:bg-orange-50 p-2 rounded-md border border-orange-200 flex items-center gap-1 font-bold whitespace-nowrap"
+                      >
+                        <Copy size={14} /> Importa in Anamnesi
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-orange-600 italic">Nessuna comunicazione recente trovata o sincronizzazione non avviata.</p>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div className="flex flex-col gap-1">
