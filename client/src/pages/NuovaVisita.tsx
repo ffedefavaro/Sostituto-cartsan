@@ -48,10 +48,33 @@ const NuovaVisita = () => {
       const data = lavoratori.find(l => l.id.toString() === selectedWorkerId);
       setWorkerData(data);
 
-      // Auto-calculate next expiry (default 12 months)
-      const nextDate = new Date();
-      nextDate.setFullYear(nextDate.getFullYear() + 1);
-      setVisitForm(prev => ({...prev, scadenza_prossima: nextDate.toISOString().split('T')[0]}));
+      // Fetch full worker details with protocol info
+      const fullWorker = executeQuery(`
+        SELECT workers.*, protocols.periodicita_mesi as protocol_periodicity
+        FROM workers
+        LEFT JOIN protocols ON workers.protocol_id = protocols.id
+        WHERE workers.id = ?
+      `, [selectedWorkerId])[0];
+
+      if (fullWorker) {
+        let months = fullWorker.protocol_periodicity || 12;
+
+        // If customized, find the minimum periodicity among exams
+        if (fullWorker.is_protocol_customized && fullWorker.custom_protocol) {
+          try {
+            const customExams = JSON.parse(fullWorker.custom_protocol);
+            if (customExams.length > 0) {
+              months = Math.min(...customExams.map((e: any) => e.periodicita || 12));
+            }
+          } catch (e) {
+            console.error("Error parsing custom protocol", e);
+          }
+        }
+
+        const nextDate = new Date();
+        nextDate.setMonth(nextDate.getMonth() + months);
+        setVisitForm(prev => ({...prev, scadenza_prossima: nextDate.toISOString().split('T')[0]}));
+      }
     }
   }, [selectedWorkerId, lavoratori]);
 
@@ -267,9 +290,9 @@ const NuovaVisita = () => {
             </div>
 
             <div className="space-y-3">
-              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Anagrafica Attiva</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anagrafica Attiva</label>
               <select
-                className="w-full bg-white/50 border border-gray-100 rounded-[20px] p-5 text-xl font-bold text-primary outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all appearance-none shadow-inner"
+                className="w-full bg-white/50 border border-gray-100 rounded-[20px] p-5 text-xl font-black text-primary outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all appearance-none shadow-inner"
                 value={selectedWorkerId}
                 onChange={e => setSelectedWorkerId(e.target.value)}
               >
@@ -284,7 +307,7 @@ const NuovaVisita = () => {
               <div className="bg-tealAction/5 p-6 rounded-3xl border border-tealAction/10 flex justify-between items-center group hover:bg-tealAction/10 transition-colors">
                 <div>
                   <p className="text-tealAction font-black text-lg uppercase tracking-tight">{workerData.azienda}</p>
-                  <p className="text-gray-500 font-bold text-sm">Mansione: <span className="text-primary">{workerData.mansione}</span></p>
+                  <p className="text-gray-500 font-bold text-sm">Mansione: <span className="text-primary font-black">{workerData.mansione}</span></p>
                 </div>
                 <button
                   onClick={() => setStep(2)}
@@ -365,7 +388,7 @@ const NuovaVisita = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="space-y-6">
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Lavorativa</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Lavorativa</label>
                   <textarea
                     className="input-standard h-32"
                     placeholder="Riepilogo esposizioni pregresse..."
@@ -374,7 +397,7 @@ const NuovaVisita = () => {
                   />
                 </div>
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Familiare e Patologica</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Anamnesi Familiare e Patologica</label>
                   <textarea
                     className="input-standard h-32"
                     placeholder="Patologie pregresse, familiarità..."
@@ -416,8 +439,8 @@ const NuovaVisita = () => {
               </div>
             </div>
             <div className="flex justify-between mt-10 pt-8 border-t border-gray-50">
-              <button onClick={() => setStep(1)} className="px-6 py-3 text-gray-400 font-bold hover:text-primary transition">Annulla / Indietro</button>
-              <button onClick={() => setStep(3)} className="btn-primary bg-primary text-white px-12 py-3 rounded-2xl font-black uppercase tracking-tighter shadow-xl shadow-primary/20 transition-all hover:scale-105 active:scale-95">Continua Visita</button>
+              <button onClick={() => setStep(1)} className="px-6 py-3 text-gray-400 font-bold hover:text-primary transition uppercase text-[10px] tracking-widest">Annulla / Indietro</button>
+              <button onClick={() => setStep(3)} className="btn-teal px-12 py-4">Continua Visita</button>
             </div>
           </div>
         )}
@@ -431,7 +454,7 @@ const NuovaVisita = () => {
 
             <div className="grid grid-cols-1 gap-8">
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Accertamenti Strumentali Effettuati</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Accertamenti Strumentali Effettuati</label>
                 <textarea
                   placeholder="es. Audiometria (normale), Spirometria (FVC 95%), ECG (ritmo sinusale)..."
                   className="input-standard h-32 border-tealAction/20 focus:border-tealAction focus:ring-tealAction/5"
@@ -440,7 +463,7 @@ const NuovaVisita = () => {
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Risultanze Esame Obiettivo</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Risultanze Esame Obiettivo</label>
                 <textarea
                   placeholder="es. Torace normoconformato, MV presente su tutto l'ambito, toni cardiaci puri..."
                   className="input-standard h-48"
@@ -450,8 +473,8 @@ const NuovaVisita = () => {
               </div>
             </div>
             <div className="flex justify-between mt-10 pt-8 border-t border-gray-50">
-              <button onClick={() => setStep(2)} className="px-6 py-3 text-gray-400 font-bold hover:text-primary transition">Indietro</button>
-              <button onClick={() => setStep(4)} className="btn-primary bg-primary text-white px-12 py-3 rounded-2xl font-black uppercase tracking-tighter shadow-xl shadow-primary/20 transition-all hover:scale-105 active:scale-95">Vai al Giudizio</button>
+              <button onClick={() => setStep(2)} className="px-6 py-3 text-gray-400 font-bold hover:text-primary transition uppercase text-[10px] tracking-widest">Indietro</button>
+              <button onClick={() => setStep(4)} className="btn-teal px-12 py-4">Vai al Giudizio</button>
             </div>
           </div>
         )}
@@ -466,7 +489,7 @@ const NuovaVisita = () => {
             <div className="bg-accent/5 p-8 rounded-[40px] border border-accent/10">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Giudizio di Idoneità</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Giudizio di Idoneità</label>
                   <select
                     className="input-standard font-black text-primary text-lg"
                     value={visitForm.giudizio}
@@ -480,7 +503,7 @@ const NuovaVisita = () => {
                   </select>
                 </div>
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Data Scadenza Sorveglianza</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Data Scadenza Sorveglianza</label>
                   <input
                     type="date"
                     className="input-standard font-black text-primary"
@@ -489,7 +512,7 @@ const NuovaVisita = () => {
                   />
                 </div>
                 <div className="col-span-full flex flex-col gap-2">
-                  <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Prescrizioni e Note Legali</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Prescrizioni e Note Legali</label>
                   <textarea
                     className="input-standard h-32 bg-white/80"
                     placeholder="Dettagliare prescrizioni specifiche o limitazioni d'uso..."
@@ -500,16 +523,16 @@ const NuovaVisita = () => {
               </div>
             </div>
 
-            <div className="bg-primary/5 p-6 rounded-3xl flex items-center gap-4 text-primary text-xs font-medium">
+            <div className="bg-primary/5 p-6 rounded-3xl flex items-center gap-4 text-primary text-xs font-black uppercase tracking-tighter">
               <Shield size={20} className="shrink-0" />
-              <p>Il salvataggio finalizzerà la visita e genererà i documenti PDF (Giudizio e Cartella 3A) pronti per la firma e la consegna al lavoratore.</p>
+              <p>Il salvataggio finalizzerà la visita e genererà i documenti PDF (Giudizio e Cartella 3A) pronti per la firma.</p>
             </div>
 
             <div className="flex justify-between items-center mt-10 pt-8 border-t border-gray-50">
-              <button onClick={() => setStep(3)} className="px-6 py-3 text-gray-400 font-bold hover:text-primary transition">Indietro</button>
+              <button onClick={() => setStep(3)} className="px-6 py-3 text-gray-400 font-bold hover:text-primary transition uppercase text-[10px] tracking-widest">Indietro</button>
               <button
                 onClick={handleSave}
-                className="btn-accent px-12 py-4 rounded-2xl font-black uppercase tracking-tighter flex items-center gap-3 shadow-2xl hover:scale-105 active:scale-95 transition-all"
+                className="btn-accent px-12 py-5 flex items-center gap-3 shadow-2xl"
               >
                 <Download size={22} strokeWidth={3} /> Finalizza e Stampa PDF
               </button>

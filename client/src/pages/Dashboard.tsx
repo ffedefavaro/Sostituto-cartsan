@@ -6,17 +6,17 @@ import { Link } from 'react-router-dom';
 const Dashboard = () => {
   const [stats, setStats] = useState({
     aziende: 0,
-    lavoratori: 0,
+    scadenzeImminenti: 0, // 7 days
     visiteOggi: 0,
-    scadenze: 0
+    idoneitaScadenza: 0 // 30 days
   });
 
   useEffect(() => {
     const a = executeQuery("SELECT count(*) as count FROM companies")[0]?.count || 0;
-    const l = executeQuery("SELECT count(*) as count FROM workers")[0]?.count || 0;
     const v = executeQuery("SELECT count(*) as count FROM visits WHERE data_visita = date('now')")[0]?.count || 0;
-    const s = executeQuery("SELECT count(*) as count FROM visits WHERE scadenza_prossima < date('now', '+30 days')")[0]?.count || 0;
-    setStats({ aziende: a, lavoratori: l, visiteOggi: v, scadenze: s });
+    const imminenti = executeQuery("SELECT count(*) as count FROM visits WHERE scadenza_prossima BETWEEN date('now') AND date('now', '+7 days')")[0]?.count || 0;
+    const scadenza30 = executeQuery("SELECT count(*) as count FROM visits WHERE scadenza_prossima BETWEEN date('now') AND date('now', '+30 days')")[0]?.count || 0;
+    setStats({ aziende: a, scadenzeImminenti: imminenti, visiteOggi: v, idoneitaScadenza: scadenza30 });
   }, []);
 
   return (
@@ -33,17 +33,73 @@ const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-        <StatCard icon={<Building2 size={24} />} label="Aziende Clienti" value={stats.aziende} trend="+2 questo mese" />
-        <StatCard icon={<Users size={24} />} label="Lavoratori Attivi" value={stats.lavoratori} />
         <StatCard icon={<Stethoscope size={24} />} label="Visite Oggi" value={stats.visiteOggi} highlight />
-        <StatCard icon={<AlertTriangle size={24} />} label="Scadenze 30gg" value={stats.scadenze} warning />
+        <StatCard icon={<AlertTriangle size={24} />} label="Scadenze Imminenti" value={stats.scadenzeImminenti} warning />
+        <StatCard icon={<Building2 size={24} />} label="Aziende Attive" value={stats.aziende} />
+        <StatCard icon={<Users size={24} />} label="Idoneità in Scadenza" value={stats.idoneitaScadenza} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          <div className="bg-white/40 backdrop-blur-md p-8 rounded-3xl border border-white/50 shadow-xl shadow-primary/5">
-            <h2 className="text-xl font-black text-primary mb-6 flex items-center gap-3">
-              <CheckCircle2 size={24} className="text-tealAction" /> Azioni Rapide
+          {/* Agenda del Giorno / Visite Recenti */}
+          <div className="bg-white/40 backdrop-blur-md p-8 rounded-[40px] border border-white/50 shadow-xl">
+             <div className="flex justify-between items-center mb-8">
+                <h2 className="text-2xl font-black text-primary flex items-center gap-3">
+                  <div className="p-2 bg-primary/5 rounded-xl text-primary"><Stethoscope size={24} /></div>
+                  Agenda Odierna
+                </h2>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest bg-white/50 px-3 py-1 rounded-full border border-gray-100">
+                  {new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </span>
+             </div>
+
+             <div className="space-y-4">
+                {/* Mock data for visualization if none exists, or fetch real ones */}
+                <div className="bg-white p-5 rounded-3xl border border-gray-50 flex items-center justify-between group hover:border-tealAction/20 transition-all">
+                   <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-warmWhite rounded-2xl flex flex-col items-center justify-center text-primary border border-gray-100">
+                         <span className="text-[9px] font-black uppercase leading-none">Ore</span>
+                         <span className="text-lg font-black tracking-tighter">09:30</span>
+                      </div>
+                      <div>
+                         <p className="font-black text-primary tracking-tight">Esempio: Mario Rossi</p>
+                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Azienda Trasporti S.p.A. | Periodica</p>
+                      </div>
+                   </div>
+                   <div className="flex items-center gap-3">
+                      <div className="w-32 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                         <div className="h-full bg-tealAction w-3/4 rounded-full" />
+                      </div>
+                      <span className="text-[10px] font-black text-tealAction uppercase tracking-widest">In Corso</span>
+                   </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-3xl border border-gray-50 flex items-center justify-between opacity-60 group">
+                   <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-gray-50 rounded-2xl flex flex-col items-center justify-center text-gray-400">
+                         <span className="text-[9px] font-black uppercase leading-none">Ore</span>
+                         <span className="text-lg font-black tracking-tighter">11:00</span>
+                      </div>
+                      <div>
+                         <p className="font-black text-primary tracking-tight">Esempio: Laura Bianchi</p>
+                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Edilizia Nord S.r.l. | Preventiva</p>
+                      </div>
+                   </div>
+                   <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">In Attesa</span>
+                </div>
+             </div>
+
+             <div className="mt-8 pt-6 border-t border-gray-100/50 flex justify-end">
+                <Link to="/scadenziario" className="text-[10px] font-black text-primary uppercase tracking-widest flex items-center gap-2 hover:translate-x-1 transition-transform">
+                  Vedi Scadenziario Completo <ArrowRight size={14} />
+                </Link>
+             </div>
+          </div>
+
+          <div className="bg-white/40 backdrop-blur-md p-8 rounded-[40px] border border-white/50 shadow-xl">
+            <h2 className="text-2xl font-black text-primary mb-8 flex items-center gap-3">
+              <div className="p-2 bg-tealAction/5 rounded-xl text-tealAction"><CheckCircle2 size={24} /></div>
+              Azioni Rapide
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <QuickAction to="/nuova-visita" title="Esegui Nuova Visita" desc="Avvia protocollo Allegato 3A" accent="bg-tealAction" />
