@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { executeQuery, runCommand } from '../lib/db';
-import { Stethoscope, User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Copy, FileText } from 'lucide-react';
+import { Stethoscope, User, Clipboard, Activity, CheckCircle, Download, Mail, RefreshCw, Copy } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import { initGoogleAuth, fetchGmailMessages, type GmailMessage } from '../lib/gmail';
+import { fetchGmailMessages, type GmailMessage } from '../lib/gmail';
 import { fetchGmailAttachments } from '../lib/attachments';
 
 const NuovaVisita = () => {
@@ -130,37 +130,87 @@ const NuovaVisita = () => {
   };
 
   const generatePDF = () => {
+    const doctorData = executeQuery("SELECT * FROM doctor_profile WHERE id = 1")[0] || {};
+
+    // 1. GIUDIZIO DI IDONEITÀ
     const doc = new jsPDF();
     doc.setFont("helvetica", "bold");
     doc.text("GIUDIZIO DI IDONEITÀ ALLA MANSIONE SPECIFICA", 105, 20, { align: 'center' });
     doc.setFontSize(10);
-    doc.text("(D.Lgs. 81/08 e s.m.i.)", 105, 26, { align: 'center' });
+    doc.text("(D.Lgs. 81/08 e s.m.i. - Art. 41)", 105, 26, { align: 'center' });
 
     doc.setFont("helvetica", "normal");
-    doc.rect(15, 35, 180, 40);
+    doc.rect(15, 35, 180, 45);
     doc.text(`Lavoratore: ${workerData.cognome} ${workerData.nome}`, 20, 45);
-    doc.text(`Azienda: ${workerData.azienda}`, 20, 52);
-    doc.text(`Mansione: ${workerData.mansione}`, 20, 59);
-    doc.text(`Data Visita: ${visitForm.data_visita}`, 20, 66);
+    doc.text(`Codice Fiscale: ${workerData.codice_fiscale || 'N/D'}`, 20, 51);
+    doc.text(`Azienda: ${workerData.azienda}`, 20, 57);
+    doc.text(`Mansione: ${workerData.mansione}`, 20, 63);
+    doc.text(`Data Visita: ${visitForm.data_visita}`, 20, 69);
+    doc.text(`Tipo Visita: ${visitForm.tipo_visita.toUpperCase()}`, 20, 75);
 
     doc.setFont("helvetica", "bold");
-    doc.text("GIUDIZIO:", 20, 85);
+    doc.text("GIUDIZIO:", 20, 90);
     doc.setFontSize(14);
-    doc.text(visitForm.giudizio.toUpperCase(), 45, 85);
+    doc.text(visitForm.giudizio.toUpperCase(), 45, 90);
 
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     if (visitForm.prescrizioni) {
-      doc.text("Prescrizioni/Limitazioni:", 20, 95);
-      doc.text(visitForm.prescrizioni, 20, 102, { maxWidth: 170 });
+      doc.text("Prescrizioni/Limitazioni:", 20, 100);
+      doc.text(visitForm.prescrizioni, 20, 107, { maxWidth: 170 });
     }
 
-    doc.text(`Prossima visita entro il: ${visitForm.scadenza_prossima}`, 20, 130);
+    doc.text(`Prossima visita entro il: ${visitForm.scadenza_prossima}`, 20, 140);
 
-    doc.line(130, 160, 180, 160);
-    doc.text("Firma del Medico Competente", 135, 165);
+    const signatureY = 170;
+    doc.text(`Dott. ${doctorData.nome || '____________________'}`, 130, signatureY);
+    doc.text(`Spec. ${doctorData.specializzazione || '____________________'}`, 130, signatureY + 6);
+    doc.text(`N. Iscr. ${doctorData.n_iscrizione || '_______'}`, 130, signatureY + 12);
+    doc.line(130, signatureY + 14, 190, signatureY + 14);
+    doc.text("Firma del Medico Competente", 135, signatureY + 19);
 
     doc.save(`Giudizio_${workerData.cognome}_${visitForm.data_visita}.pdf`);
+
+    // 2. CARTELLA SANITARIA E DI RISCHIO (ALLEGATO 3A)
+    const cartella = new jsPDF();
+    cartella.setFontSize(14);
+    cartella.setFont("helvetica", "bold");
+    cartella.text("CARTELLA SANITARIA E DI RISCHIO", 105, 20, { align: 'center' });
+    cartella.setFontSize(10);
+    cartella.text("(Allegato 3A - D.Lgs. 81/08)", 105, 26, { align: 'center' });
+
+    cartella.setFont("helvetica", "bold");
+    cartella.text("SEZIONE 1: ANAGRAFICA", 15, 40);
+    cartella.setFont("helvetica", "normal");
+    cartella.text(`Lavoratore: ${workerData.cognome} ${workerData.nome}`, 20, 47);
+    cartella.text(`Data di nascita: ${workerData.data_nascita || 'N/D'}`, 20, 53);
+    cartella.text(`Codice Fiscale: ${workerData.codice_fiscale || 'N/D'}`, 20, 59);
+    cartella.text(`Azienda: ${workerData.azienda}`, 20, 65);
+    cartella.text(`Mansione: ${workerData.mansione}`, 20, 71);
+
+    cartella.setFont("helvetica", "bold");
+    cartella.text("SEZIONE 2: ANAMNESI", 15, 85);
+    cartella.setFont("helvetica", "normal");
+    cartella.text("Anamnesi Lavorativa:", 20, 92);
+    cartella.text(visitForm.anamnesi_lavorativa || "Negativa", 25, 98, { maxWidth: 165 });
+    cartella.text("Anamnesi Patologica e Familiare:", 20, 115);
+    cartella.text(visitForm.anamnesi_patologica || "Negativa", 25, 121, { maxWidth: 165 });
+
+    cartella.setFont("helvetica", "bold");
+    cartella.text("SEZIONE 3: ESAME OBIETTIVO E BIOMETRIA", 15, 150);
+    cartella.setFont("helvetica", "normal");
+    cartella.text(`Peso: ${visitForm.peso}kg | Altezza: ${visitForm.altezza}cm | BMI: ${(visitForm.peso / ((visitForm.altezza/100)**2)).toFixed(1)}`, 20, 157);
+    cartella.text(`Pressione: ${visitForm.p_sistolica}/${visitForm.p_diastolica} mmHg | FC: ${visitForm.frequenza} bpm`, 20, 163);
+    cartella.text("Esame Obiettivo:", 20, 170);
+    cartella.text(visitForm.esame_obiettivo || "Regolare", 25, 176, { maxWidth: 165 });
+
+    cartella.setFont("helvetica", "bold");
+    cartella.text("SEZIONE 4: GIUDIZIO DI IDONEITA", 15, 200);
+    cartella.setFont("helvetica", "normal");
+    cartella.text(`Giudizio: ${visitForm.giudizio.toUpperCase()}`, 20, 207);
+    cartella.text(`Scadenza: ${visitForm.scadenza_prossima}`, 20, 213);
+
+    cartella.save(`Cartella_3A_${workerData.cognome}_${visitForm.data_visita}.pdf`);
   };
 
   return (
@@ -172,14 +222,14 @@ const NuovaVisita = () => {
       {/* Progress Stepper */}
       <div className="flex items-center mb-10">
         {[1, 2, 3, 4].map((s) => (
-          <React.Fragment key={s}>
+          <div key={s} className="flex flex-1 items-center">
             <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition ${
               step >= s ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300 text-gray-400'
             }`}>
               {step > s ? <CheckCircle size={20} /> : s}
             </div>
             {s < 4 && <div className={`flex-1 h-1 mx-2 ${step > s ? 'bg-blue-600' : 'bg-gray-200'}`} />}
-          </React.Fragment>
+          </div>
         ))}
       </div>
 

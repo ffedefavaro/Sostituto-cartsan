@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { executeQuery, runCommand, getDB, saveDB } from '../lib/db';
+import { executeQuery, runCommand, getDB } from '../lib/db';
 import { User, Shield, Database, Save, Upload, Trash2, Download } from 'lucide-react';
 
 const Settings = () => {
@@ -49,7 +49,8 @@ const Settings = () => {
     const db = getDB();
     if (!db) return;
     const data = db.export();
-    const blob = new Blob([data.buffer], { type: 'application/x-sqlite3' });
+    // Use Uint8Array directly for better compatibility
+    const blob = new Blob([new Uint8Array(data)], { type: 'application/x-sqlite3' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

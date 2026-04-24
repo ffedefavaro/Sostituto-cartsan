@@ -7,7 +7,10 @@ export const initDB = async () => {
   if (db) return db;
   const SQL = await initSqlJs({
     locateFile: file => {
-      if (file.endsWith('.wasm')) return '/sql-wasm.wasm';
+      if (file.endsWith('.wasm')) {
+        // Handle both local dev and production paths
+        return import.meta.env.PROD ? `./sql-wasm.wasm` : `/sql-wasm.wasm`;
+      }
       return `/${file}`;
     }
   });

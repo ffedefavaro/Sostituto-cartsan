@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { executeQuery } from '../lib/db';
 import { Building2, Users, Stethoscope, AlertTriangle, CheckCircle2, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';

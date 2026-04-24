@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { executeQuery } from '../lib/db';
 import { Calendar as CalendarIcon, Clock, Bell, Mail, ExternalLink } from 'lucide-react';
-import { format, isAfter, isBefore, addDays } from 'date-fns';
+import { isAfter, isBefore, addDays } from 'date-fns';
 
 const Scadenziario = () => {
   const [visite, setVisite] = useState<any[]>([]);
